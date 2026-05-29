@@ -14,8 +14,13 @@
  *     host falls back to the static placeholder menu (manifest.menu).
  *   - the `run` action sends the command name back to the bridge to execute.
  *
- * Uses only `node:net` (a Node built-in) — no host internals — so it stays a
- * self-contained, copyable plugin. The socket path mirrors the addon's:
+ * Uses `node:net` (a Node built-in) for the bridge socket. The one host-side
+ * dependency is `ctx.host.freecadBridge` in `provideUninstall` (#267), used
+ * to delegate the bridge-addon teardown back to the host because FreeCAD's
+ * Mod directory lives outside SpaceUX's tree. Every other export stays
+ * host-internals-free so this remains a copyable plugin.
+ *
+ * The socket path mirrors the addon's:
  * `$XDG_RUNTIME_DIR/spaceux/freecad.sock` (else /tmp).
  */
 
@@ -227,4 +232,37 @@ export async function reserveTrigger(ctx, req) {
   if (!resp || resp.ok !== true) {
     throw new Error(resp && resp.error ? resp.error : `${op} failed`);
   }
+}
+
+/**
+ * Plugin-uninstall hook (SpaceUX #267). The host calls this just before it
+ * removes the plugin's managed files; we use it to offer cleanup of the
+ * FreeCAD-side bridge addon, which lives in FreeCAD's Mod directory (outside
+ * SpaceUX's extensions tree) and would otherwise survive the uninstall and
+ * keep listening on the socket after every FreeCAD start.
+ *
+ * Resolves to `null` when there's nothing for the host to ask about (no Mod
+ * directory found, or the addon isn't installed). Otherwise returns a
+ * descriptor: `message` is the user-facing prompt for the secondary confirm,
+ * and `perform` is the action the host runs on Yes. The perform goes through
+ * the host's bridge surface so the same code path the editor's bridge
+ * installer uses also handles the teardown.
+ */
+export async function provideUninstall(ctx) {
+  // Fail-open guard: an older host (pre-SpaceUX #276) loaded this plugin
+  // without the `ctx.host` surface, or the bridge accessor itself threw.
+  // Return null in either case so the host just removes the plugin without
+  // a second prompt, instead of bubbling a TypeError out of the hook.
+  let status;
+  try {
+    status = ctx.host?.freecadBridge?.getStatus();
+  } catch {
+    return null;
+  }
+  if (!status || !status.resolved || !status.installed) return null;
+  const addonPath = path.join(status.modDir, 'SpaceUX');
+  return {
+    message: `The FreeCAD bridge addon is still installed in ${addonPath}. Remove it too?`,
+    perform: () => ctx.host.freecadBridge.uninstall(),
+  };
 }
