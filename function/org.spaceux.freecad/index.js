@@ -14,8 +14,13 @@
  *     host falls back to the static placeholder menu (manifest.menu).
  *   - the `run` action sends the command name back to the bridge to execute.
  *
- * Uses only `node:net` (a Node built-in) — no host internals — so it stays a
- * self-contained, copyable plugin. The socket path mirrors the addon's:
+ * Uses `node:net` (a Node built-in) for the bridge socket. The one host-side
+ * dependency is `ctx.host.freecadBridge` in `provideUninstall` (#267), used
+ * to delegate the bridge-addon teardown back to the host because FreeCAD's
+ * Mod directory lives outside SpaceUX's tree. Every other export stays
+ * host-internals-free so this remains a copyable plugin.
+ *
+ * The socket path mirrors the addon's:
  * `$XDG_RUNTIME_DIR/spaceux/freecad.sock` (else /tmp).
  */
 
@@ -244,10 +249,20 @@ export async function reserveTrigger(ctx, req) {
  * installer uses also handles the teardown.
  */
 export async function provideUninstall(ctx) {
-  const status = ctx.host.freecadBridge.getStatus();
-  if (!status.resolved || !status.installed) return null;
+  // Fail-open guard: an older host (pre-SpaceUX #276) loaded this plugin
+  // without the `ctx.host` surface, or the bridge accessor itself threw.
+  // Return null in either case so the host just removes the plugin without
+  // a second prompt, instead of bubbling a TypeError out of the hook.
+  let status;
+  try {
+    status = ctx.host?.freecadBridge?.getStatus();
+  } catch {
+    return null;
+  }
+  if (!status || !status.resolved || !status.installed) return null;
+  const addonPath = path.join(status.modDir, 'SpaceUX');
   return {
-    message: `The FreeCAD bridge addon is still installed in ${status.modDir}/SpaceUX. Remove it too?`,
+    message: `The FreeCAD bridge addon is still installed in ${addonPath}. Remove it too?`,
     perform: () => ctx.host.freecadBridge.uninstall(),
   };
 }
