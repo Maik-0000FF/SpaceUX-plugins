@@ -1,0 +1,61 @@
+# SPDX-FileCopyrightText: Maik-0000FF
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Node
+node_modules/
+*.tsbuildinfo
+
+# Python. FreeCAD bridge addons (e.g. function/org.spaceux.freecad/freecad/)
+# compile bytecode at runtime; this top-level catch covers every current
+# and future addon.
+__pycache__/
+*.pyc
+*.pyo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test / coverage output
+coverage/
+.nyc_output/
+
+# Environment files. .env-style files commonly hold secrets; ship a
+# .env.example template instead when one is needed, and re-open it
+# through the negation rule below.
+.env
+.env.*
+!.env.example
+
+# Certificates / keys / credential bundles. Never commit these. Even in
+# a public OSS repo, accidental leakage is what gitleaks is meant to
+# backstop, and these patterns are the front line.
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+secrets.json
+credentials.json
+
+# Backup / merge-conflict / scratch leftovers
+*.bak
+*.tmp
+*.temp
+*.orig
+*.rej
+
+# npm / Node logs that npm CLI sometimes drops at the repo root
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
