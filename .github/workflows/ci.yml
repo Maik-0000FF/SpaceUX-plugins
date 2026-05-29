@@ -15,6 +15,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Least-privilege token. The job only needs to read the repo for the
+# checkout + scan, and the artefact upload uses the standard action
+# without extra scopes.
+permissions:
+  contents: read
+
 jobs:
   # gitleaks scans the full history for accidental secrets (API keys,
   # tokens, credentials). Run the CLI directly instead of going through
@@ -37,12 +43,22 @@ jobs:
           fetch-depth: 0
       - name: Install gitleaks
         run: |
-          curl -sSLf "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin gitleaks
+          TARBALL="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          BASE="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          curl -sSLf "${BASE}/${TARBALL}" -o "${TARBALL}"
+          curl -sSLf "${BASE}/gitleaks_${GITLEAKS_VERSION}_checksums.txt" -o checksums.txt
+          # Verify the pinned tarball against the published sha256 before
+          # extracting; closes the supply-chain gap of pulling a
+          # pinned-but-unverified binary.
+          grep "  ${TARBALL}$" checksums.txt | sha256sum -c -
+          sudo tar -xz -C /usr/local/bin -f "${TARBALL}" gitleaks
           gitleaks version
       - name: Scan
         # --redact masks any finding in the report (safe to read on a public log).
-        # --report-format sarif uploads as a code-scanning artefact below.
+        # --report-format sarif produces a SARIF report that the next step
+        # uploads as a plain workflow artefact (not a Security > Code
+        # scanning entry; that path would need codeql-action/upload-sarif
+        # and security-events: write permissions).
         # No custom config: CI uses the upstream default ruleset.
         run: |
           gitleaks git . \

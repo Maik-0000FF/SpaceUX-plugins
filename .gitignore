@@ -6,8 +6,8 @@ node_modules/
 *.tsbuildinfo
 
 # Python. FreeCAD bridge addons (e.g. function/org.spaceux.freecad/freecad/)
-# compile bytecode at runtime. Each plugin has its own per-plugin .gitignore
-# too; this top-level catch covers any new addon a contributor adds.
+# compile bytecode at runtime; this top-level catch covers every current
+# and future addon.
 __pycache__/
 *.pyc
 *.pyo
