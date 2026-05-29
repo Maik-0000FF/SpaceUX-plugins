@@ -228,3 +228,26 @@ export async function reserveTrigger(ctx, req) {
     throw new Error(resp && resp.error ? resp.error : `${op} failed`);
   }
 }
+
+/**
+ * Plugin-uninstall hook (SpaceUX #267). The host calls this just before it
+ * removes the plugin's managed files; we use it to offer cleanup of the
+ * FreeCAD-side bridge addon, which lives in FreeCAD's Mod directory (outside
+ * SpaceUX's extensions tree) and would otherwise survive the uninstall and
+ * keep listening on the socket after every FreeCAD start.
+ *
+ * Resolves to `null` when there's nothing for the host to ask about (no Mod
+ * directory found, or the addon isn't installed). Otherwise returns a
+ * descriptor: `message` is the user-facing prompt for the secondary confirm,
+ * and `perform` is the action the host runs on Yes. The perform goes through
+ * the host's bridge surface so the same code path the editor's bridge
+ * installer uses also handles the teardown.
+ */
+export async function provideUninstall(ctx) {
+  const status = ctx.host.freecadBridge.getStatus();
+  if (!status.resolved || !status.installed) return null;
+  return {
+    message: `The FreeCAD bridge addon is still installed in ${status.modDir}/SpaceUX. Remove it too?`,
+    perform: () => ctx.host.freecadBridge.uninstall(),
+  };
+}
