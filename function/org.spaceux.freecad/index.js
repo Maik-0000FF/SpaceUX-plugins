@@ -17,7 +17,7 @@
  * Uses `node:net` (a Node built-in) for the bridge socket. Installing the
  * bridge addon into FreeCAD's Mod dir is the plugin's own job too (#288):
  * `provideBridge` exposes install/status/uninstall over the generic host hook,
- * and `provideUninstall` reuses it for teardown — the path/IO specifics live in
+ * and `provideUninstall` reuses it for teardown; the path/IO specifics live in
  * `bridge.js`. No host internals are used, so this stays a copyable plugin.
  *
  * The socket path mirrors the addon's:
@@ -250,8 +250,8 @@ export async function reserveTrigger(ctx, req) {
  * Bridge installer hook (SpaceUX #288). The host calls this from the editor's
  * generic bridge installer to manage the FreeCAD-side addon, which lives in
  * FreeCAD's version-specific Mod dir (outside SpaceUX's tree). The plugin owns
- * the whole thing — resolving the dir, copying its bundled `freecad/` assets,
- * and the user-facing wording — so the host never names FreeCAD. Status `label`
+ * the whole thing (resolving the dir, copying its bundled `freecad/` assets,
+ * and the user-facing wording), so the host never names FreeCAD. Status `label`
  * is the resolved dir tag (e.g. `v1-2`); an unresolved setup (FreeCAD missing,
  * or a Flatpak/Snap sandbox the socket can't cross) carries the reason.
  */
@@ -268,14 +268,14 @@ export function provideBridge() {
       if (!r.ok) return { ok: false, reason: r.reason };
       const res = await installAddon(ADDON_SRC, r.modDir);
       return res.ok
-        ? { ok: true, note: 'Installed — restart FreeCAD to load the bridge.' }
+        ? { ok: true, note: 'Installed. Restart FreeCAD to load the bridge.' }
         : { ok: false, reason: res.reason };
     },
     uninstall: async () => {
       const r = resolveModDir();
       if (!r.ok) return { ok: false, reason: r.reason };
       const res = await uninstallAddon(r.modDir);
-      return res.ok ? { ok: true, note: 'Removed — restart FreeCAD.' } : { ok: false, reason: res.reason };
+      return res.ok ? { ok: true, note: 'Removed. Restart FreeCAD.' } : { ok: false, reason: res.reason };
     },
   };
 }
@@ -290,7 +290,7 @@ export function provideBridge() {
  * Resolves to `null` when there's nothing to ask about (no Mod directory found,
  * or the addon isn't installed). Otherwise returns a descriptor: `message` is
  * the user-facing prompt for the secondary confirm, and `perform` tears the
- * addon down through the same `bridge.js` helpers `provideBridge` uses (#288 —
+ * addon down through the same `bridge.js` helpers `provideBridge` uses (#288:
  * the plugin owns this now, rather than delegating to a host capability).
  */
 export async function provideUninstall() {

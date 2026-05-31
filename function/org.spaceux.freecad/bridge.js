@@ -9,7 +9,7 @@
  * `~/.local/share/FreeCAD/v1-2/Mod/`) and packaging-specific. We can't ask
  * FreeCAD, so we resolve it from the filesystem: the highest `vMAJOR-MINOR/`
  * data dir, else a legacy unversioned layout. Flatpak/Snap are reported
- * unsupported — the bridge's UNIX socket can't cross the sandbox boundary.
+ * unsupported, because the bridge's UNIX socket can't cross the sandbox boundary.
  *
  * This moved out of the SpaceUX core (#288): the host now drives a generic
  * `provideBridge` hook and never names FreeCAD, so all of FreeCAD's path/IO
@@ -27,6 +27,10 @@ const VERSION_DIR_RE = /^v(\d+)-(\d+)$/;
 /** The subdir the addon is installed as under `Mod/`. */
 export const ADDON_NAME = 'SpaceUX';
 
+// Treat any stat error as "not a directory". This deliberately collapses a
+// permission-denied (EACCES) dir into the same "absent" result as a missing
+// one: the common case is absence, and either way the bridge can't be used
+// there, so the resolver reports it the same.
 function isDir(p) {
   try {
     return fsSync.statSync(p).isDirectory();
@@ -41,10 +45,10 @@ function describeError(err) {
 
 /**
  * Resolve FreeCAD's user `Mod/` directory by scanning the filesystem. Order:
- *   1. the highest versioned data dir — `<data>/FreeCAD/v<MAJ>-<MIN>/Mod`;
+ *   1. the highest versioned data dir, `<data>/FreeCAD/v<MAJ>-<MIN>/Mod`;
  *   2. the legacy unversioned `<data>/FreeCAD/Mod` (older FreeCAD);
  *   3. the very old `~/.FreeCAD/Mod`.
- * Returns the resolved Mod path (which may not exist yet — install creates it)
+ * Returns the resolved Mod path (which may not exist yet; install creates it)
  * plus a short human label, or a failure reason (a Flatpak/Snap install the
  * socket can't reach, or no FreeCAD data dir at all).
  */
@@ -77,7 +81,7 @@ export function resolveModDir(home = os.homedir(), env = process.env) {
   if (isDir(dotFreecad)) return { ok: true, modDir: path.join(dotFreecad, 'Mod'), label: '~/.FreeCAD' };
 
   // Sandboxed installs: the socket can't cross the boundary, so the bridge
-  // can't work there — report rather than install into a dead end.
+  // can't work there; report rather than install into a dead end.
   const sandboxed =
     isDir(path.join(home, '.var', 'app', 'org.freecad.FreeCAD')) ||
     isDir(path.join(home, 'snap', 'freecad'));
@@ -85,12 +89,12 @@ export function resolveModDir(home = os.homedir(), env = process.env) {
     return {
       ok: false,
       reason:
-        "FreeCAD is installed as Flatpak/Snap — the bridge's socket can't cross the sandbox. Use a native or AppImage FreeCAD, or set it up manually.",
+        "FreeCAD is installed as Flatpak/Snap, so the bridge's socket can't cross the sandbox. Use a native or AppImage FreeCAD, or set it up manually.",
     };
   }
   return {
     ok: false,
-    reason: 'No FreeCAD user data directory found — install FreeCAD and run it once.',
+    reason: 'No FreeCAD user data directory found. Install FreeCAD and run it once.',
   };
 }
 
@@ -103,23 +107,34 @@ export function bridgeInstalledAt(modDir) {
  * Copy the addon (`srcAddonDir` = this plugin's `freecad/`) to
  * `<modDir>/SpaceUX`, replacing any existing install (so a re-run updates it)
  * and skipping `__pycache__`. The Mod dir is created if missing.
+ *
+ * Staged: copy into a sibling temp dir first, then swap it in with a single
+ * rename. So a copy that fails partway (ENOSPC, EACCES, a partial tree) leaves
+ * the previous working install untouched rather than half-overwritten. The
+ * destination is only removed once the staged copy fully succeeded.
  */
 export async function installAddon(srcAddonDir, modDir) {
   const dest = path.join(modDir, ADDON_NAME);
+  const staging = path.join(modDir, `.${ADDON_NAME}.tmp`);
   // Guard the addon source up front so a misconfigured plugin (no bundled
   // freecad/ dir) gives a clear reason rather than a raw ENOENT from cp.
   if (!isDir(srcAddonDir)) {
     return { ok: false, reason: `bridge addon not found in the plugin (${srcAddonDir})` };
   }
   try {
-    await fs.rm(dest, { recursive: true, force: true });
     await fs.mkdir(modDir, { recursive: true });
-    await fs.cp(srcAddonDir, dest, {
+    await fs.rm(staging, { recursive: true, force: true });
+    await fs.cp(srcAddonDir, staging, {
       recursive: true,
       filter: (src) => !src.split(path.sep).includes('__pycache__'),
     });
+    // Copy is complete; now the swap is just a remove + rename (same dir, so
+    // the rename is atomic on the one filesystem).
+    await fs.rm(dest, { recursive: true, force: true });
+    await fs.rename(staging, dest);
     return { ok: true, dest };
   } catch (err) {
+    await fs.rm(staging, { recursive: true, force: true }).catch(() => {});
     return { ok: false, reason: describeError(err) };
   }
 }
