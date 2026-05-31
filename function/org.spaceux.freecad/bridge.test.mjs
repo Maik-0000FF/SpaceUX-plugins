@@ -98,6 +98,34 @@ test('installAddon leaves an existing addon intact when the source is missing', 
   assert.equal(fsSync.existsSync(path.join(modDir, `.${ADDON_NAME}.tmp`)), false);
 });
 
+// Root bypasses file permissions, so the unreadable-file trick can't force the
+// copy to fail there; skip rather than assert a guarantee we can't provoke.
+const isRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+test(
+  'installAddon leaves an existing addon intact when the copy fails midway',
+  { skip: isRoot ? 'needs non-root to enforce file permissions' : false },
+  async () => {
+    const modDir = path.join(home, 'Mod');
+    const dest = path.join(modDir, ADDON_NAME);
+    fsSync.mkdirSync(dest, { recursive: true });
+    fsSync.writeFileSync(path.join(dest, 'sentinel'), 'existing');
+
+    // A source tree with an unreadable file → fs.cp rejects partway through.
+    const src = path.join(home, 'badsrc');
+    fsSync.mkdirSync(src, { recursive: true });
+    fsSync.writeFileSync(path.join(src, 'ok.py'), 'readable');
+    const locked = path.join(src, 'locked.py');
+    fsSync.writeFileSync(locked, 'secret');
+    fsSync.chmodSync(locked, 0o000);
+
+    const res = await installAddon(src, modDir);
+    assert.equal(res.ok, false);
+    // The existing install must survive: the copy never touched dest.
+    assert.equal(fsSync.existsSync(path.join(dest, 'sentinel')), true);
+    assert.equal(fsSync.existsSync(path.join(modDir, `.${ADDON_NAME}.tmp`)), false);
+  },
+);
+
 test('uninstallAddon removes the addon and is idempotent', async () => {
   const modDir = path.join(home, 'Mod');
   await installAddon(ADDON_SRC, modDir);

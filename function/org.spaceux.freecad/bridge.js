@@ -129,7 +129,10 @@ export async function installAddon(srcAddonDir, modDir) {
       filter: (src) => !src.split(path.sep).includes('__pycache__'),
     });
     // Copy is complete; now the swap is just a remove + rename (same dir, so
-    // the rename is atomic on the one filesystem).
+    // the rename is atomic on the one filesystem). A process kill in the tiny
+    // gap between the two leaves `dest` gone and the staging dir behind; a
+    // re-run recovers (it rms the stale staging first), so it isn't worth a
+    // backup-rename dance here.
     await fs.rm(dest, { recursive: true, force: true });
     await fs.rename(staging, dest);
     return { ok: true, dest };
