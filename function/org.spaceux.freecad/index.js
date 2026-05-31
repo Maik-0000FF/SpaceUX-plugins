@@ -14,11 +14,11 @@
  *     host falls back to the static placeholder menu (manifest.menu).
  *   - the `run` action sends the command name back to the bridge to execute.
  *
- * Uses `node:net` (a Node built-in) for the bridge socket. The one host-side
- * dependency is `ctx.host.freecadBridge` in `provideUninstall` (#267), used
- * to delegate the bridge-addon teardown back to the host because FreeCAD's
- * Mod directory lives outside SpaceUX's tree. Every other export stays
- * host-internals-free so this remains a copyable plugin.
+ * Uses `node:net` (a Node built-in) for the bridge socket. Installing the
+ * bridge addon into FreeCAD's Mod dir is the plugin's own job too (#288):
+ * `provideBridge` exposes install/status/uninstall over the generic host hook,
+ * and `provideUninstall` reuses it for teardown; the path/IO specifics live in
+ * `bridge.js`. No host internals are used, so this stays a copyable plugin.
  *
  * The socket path mirrors the addon's:
  * `$XDG_RUNTIME_DIR/spaceux/freecad.sock` (else /tmp).
@@ -26,8 +26,20 @@
 
 import net from 'node:net';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import {
+  ADDON_NAME,
+  bridgeInstalledAt,
+  installAddon,
+  resolveModDir,
+  uninstallAddon,
+} from './bridge.js';
 
 const PLUGIN_ID = 'org.spaceux.freecad';
+// This plugin's own directory, so `provideBridge` can find its bundled
+// `freecad/` addon assets without the host telling it where the plugin lives.
+const ADDON_SRC = path.join(path.dirname(fileURLToPath(import.meta.url)), 'freecad');
 // Below the host's 2s provideMenu timeout, so a slow-but-alive bridge still
 // answers while a dead socket fails fast (ENOENT/ECONNREFUSED).
 const REQUEST_TIMEOUT_MS = 1500;
@@ -235,34 +247,61 @@ export async function reserveTrigger(ctx, req) {
 }
 
 /**
+ * Bridge installer hook (SpaceUX #288). The host calls this from the editor's
+ * generic bridge installer to manage the FreeCAD-side addon, which lives in
+ * FreeCAD's version-specific Mod dir (outside SpaceUX's tree). The plugin owns
+ * the whole thing (resolving the dir, copying its bundled `freecad/` assets,
+ * and the user-facing wording), so the host never names FreeCAD. Status `label`
+ * is the resolved dir tag (e.g. `v1-2`); an unresolved setup (FreeCAD missing,
+ * or a Flatpak/Snap sandbox the socket can't cross) carries the reason.
+ */
+export function provideBridge() {
+  return {
+    getStatus: () => {
+      const r = resolveModDir();
+      return r.ok
+        ? { resolved: true, label: r.label, installed: bridgeInstalledAt(r.modDir) }
+        : { resolved: false, reason: r.reason };
+    },
+    install: async () => {
+      const r = resolveModDir();
+      if (!r.ok) return { ok: false, reason: r.reason };
+      const res = await installAddon(ADDON_SRC, r.modDir);
+      return res.ok
+        ? { ok: true, note: 'Installed. Restart FreeCAD to load the bridge.' }
+        : { ok: false, reason: res.reason };
+    },
+    uninstall: async () => {
+      const r = resolveModDir();
+      if (!r.ok) return { ok: false, reason: r.reason };
+      const res = await uninstallAddon(r.modDir);
+      return res.ok ? { ok: true, note: 'Removed. Restart FreeCAD.' } : { ok: false, reason: res.reason };
+    },
+  };
+}
+
+/**
  * Plugin-uninstall hook (SpaceUX #267). The host calls this just before it
  * removes the plugin's managed files; we use it to offer cleanup of the
  * FreeCAD-side bridge addon, which lives in FreeCAD's Mod directory (outside
  * SpaceUX's extensions tree) and would otherwise survive the uninstall and
  * keep listening on the socket after every FreeCAD start.
  *
- * Resolves to `null` when there's nothing for the host to ask about (no Mod
- * directory found, or the addon isn't installed). Otherwise returns a
- * descriptor: `message` is the user-facing prompt for the secondary confirm,
- * and `perform` is the action the host runs on Yes. The perform goes through
- * the host's bridge surface so the same code path the editor's bridge
- * installer uses also handles the teardown.
+ * Resolves to `null` when there's nothing to ask about (no Mod directory found,
+ * or the addon isn't installed). Otherwise returns a descriptor: `message` is
+ * the user-facing prompt for the secondary confirm, and `perform` tears the
+ * addon down through the same `bridge.js` helpers `provideBridge` uses (#288:
+ * the plugin owns this now, rather than delegating to a host capability).
  */
-export async function provideUninstall(ctx) {
-  // Fail-open guard: an older host (pre-SpaceUX #276) loaded this plugin
-  // without the `ctx.host` surface, or the bridge accessor itself threw.
-  // Return null in either case so the host just removes the plugin without
-  // a second prompt, instead of bubbling a TypeError out of the hook.
-  let status;
-  try {
-    status = ctx.host?.freecadBridge?.getStatus();
-  } catch {
-    return null;
-  }
-  if (!status || !status.resolved || !status.installed) return null;
-  const addonPath = path.join(status.modDir, 'SpaceUX');
+export async function provideUninstall() {
+  const r = resolveModDir();
+  if (!r.ok || !bridgeInstalledAt(r.modDir)) return null;
+  const addonPath = path.join(r.modDir, ADDON_NAME);
   return {
     message: `The FreeCAD bridge addon is still installed in ${addonPath}. Remove it too?`,
-    perform: () => ctx.host.freecadBridge.uninstall(),
+    perform: async () => {
+      const res = await uninstallAddon(r.modDir);
+      return res.ok ? { ok: true } : { ok: false, reason: res.reason };
+    },
   };
 }
