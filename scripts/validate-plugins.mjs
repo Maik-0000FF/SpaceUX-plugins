@@ -92,12 +92,19 @@ for (const kind of KINDS) {
     // known values with no duplicates (matches the app's loader, so a bad entry
     // fails here rather than at load time).
     if (m.permissions !== undefined) {
-      if (!Array.isArray(m.permissions) || !m.permissions.every((p) => PERMISSIONS.has(p))) {
+      if (!Array.isArray(m.permissions)) {
         errors.push(
           `${manifestPath}: "permissions" must be an array of: ${[...PERMISSIONS].join(', ')}`,
         );
-      } else if (new Set(m.permissions).size !== m.permissions.length) {
-        errors.push(`${manifestPath}: "permissions" must not contain duplicates`);
+      } else {
+        const unknown = m.permissions.filter((p) => !PERMISSIONS.has(p));
+        if (unknown.length > 0) {
+          errors.push(
+            `${manifestPath}: unknown permission(s) ${JSON.stringify(unknown)}; allowed: ${[...PERMISSIONS].join(', ')}`,
+          );
+        } else if (new Set(m.permissions).size !== m.permissions.length) {
+          errors.push(`${manifestPath}: "permissions" must not contain duplicates`);
+        }
       }
     }
 
