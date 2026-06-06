@@ -58,6 +58,12 @@ Kind-specific payload:
 - `theme`: no extra payload for now, the common fields only; the styling lives
   in the plugin's own files.
 
+Optional `permissions`: an array declaring the sensitive things your plugin
+needs, any of `exec` (run external programs), `network` (sockets / HTTP),
+`filesystem` (write outside its own data folder), `inject-keys` (synthesise
+keyboard input). Declare only what you actually use; the app shows these to the
+user before they enable the plugin. Unknown values and duplicates are rejected.
+
 See the existing plugins for complete examples.
 
 ## What CI checks

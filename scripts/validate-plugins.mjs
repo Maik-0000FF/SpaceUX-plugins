@@ -22,6 +22,9 @@ const KINDS = ['function', 'theme', 'nav-style', 'shape'];
 const SUPPORTED_API_VERSIONS = new Set([1]);
 const ID_RE = /^[a-z0-9]+(\.[a-z0-9-]+)+$/;
 const SEMVER_RE = /^\d+\.\d+\.\d+(?:[-+].+)?$/;
+// Mirrors PLUGIN_PERMISSIONS in the SpaceUX app: the sensitive things a plugin
+// may declare it needs. Keep in sync with the app's loader.
+const PERMISSIONS = new Set(['exec', 'network', 'filesystem', 'inject-keys']);
 
 const errors = [];
 const seenIds = new Map();
@@ -84,6 +87,26 @@ for (const kind of KINDS) {
     }
     // theme plugins carry no kind-specific manifest payload (the styling lives
     // in the plugin's own files), so there is intentionally nothing to require.
+
+    // Declared permissions are optional, but when present must be an array of
+    // known values with no duplicates (matches the app's loader, so a bad entry
+    // fails here rather than at load time).
+    if (m.permissions !== undefined) {
+      if (!Array.isArray(m.permissions)) {
+        errors.push(
+          `${manifestPath}: "permissions" must be an array of: ${[...PERMISSIONS].join(', ')}`,
+        );
+      } else {
+        const unknown = m.permissions.filter((p) => !PERMISSIONS.has(p));
+        if (unknown.length > 0) {
+          errors.push(
+            `${manifestPath}: unknown permission(s) ${JSON.stringify(unknown)}; allowed: ${[...PERMISSIONS].join(', ')}`,
+          );
+        } else if (new Set(m.permissions).size !== m.permissions.length) {
+          errors.push(`${manifestPath}: "permissions" must not contain duplicates`);
+        }
+      }
+    }
 
     if (m.id) {
       if (seenIds.has(m.id)) {
