@@ -125,3 +125,18 @@ jobs:
         with:
           node-version: '22'
       - run: node scripts/validate-plugins.mjs
+
+  # Scan plugin JavaScript for disallowed patterns (dynamic code execution
+  # anywhere; child_process in a non-function plugin) and print an advisory list
+  # of high-privilege calls (network, child_process in function plugins) for the
+  # reviewer. A coarse, dependency-free line scan; the runtime capability model
+  # is the real enforcement (see the tracking issue).
+  code-scan:
+    name: code scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/scan-plugin-code.mjs
