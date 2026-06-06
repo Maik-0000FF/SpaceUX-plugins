@@ -52,7 +52,9 @@ for (const kind of KINDS) {
       }
     }
 
-    if (!SUPPORTED_API_VERSIONS.has(m.apiVersion)) {
+    // Only when present but wrong; a missing apiVersion is already reported by
+    // the required-field check above, so this avoids a duplicate message.
+    if (m.apiVersion !== undefined && !SUPPORTED_API_VERSIONS.has(m.apiVersion)) {
       errors.push(
         `${manifestPath}: apiVersion ${m.apiVersion} is unsupported (supported: ${[...SUPPORTED_API_VERSIONS].join(', ')})`,
       );
