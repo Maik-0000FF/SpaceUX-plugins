@@ -92,8 +92,9 @@ jobs:
               | grep -E ': application/x-(executable|pie-executable|sharedlib|object)$' || true
           )
           # By extension: bytecode and native libs that `file` can misclassify.
-          mapfile -t byext < <(
-            git ls-files '*.pyc' '*.pyo' '*.so' '*.o' '*.a' '*.dll' '*.dylib' '*.exe' '*.class' '*.wasm' || true
+          # NUL-delimited so a path containing a newline can't corrupt the list.
+          mapfile -d '' -t byext < <(
+            git ls-files -z '*.pyc' '*.pyo' '*.so' '*.o' '*.a' '*.dll' '*.dylib' '*.exe' '*.class' '*.wasm' || true
           )
           if (( ${#bymime[@]} > 0 )); then
             echo 'Tracked binary files (by content):'

@@ -19,6 +19,7 @@ import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const KINDS = ['function', 'theme', 'nav-style', 'shape'];
+const SUPPORTED_API_VERSIONS = new Set([1]);
 const ID_RE = /^[a-z0-9]+(\.[a-z0-9-]+)+$/;
 const SEMVER_RE = /^\d+\.\d+\.\d+(?:[-+].+)?$/;
 
@@ -51,7 +52,11 @@ for (const kind of KINDS) {
       }
     }
 
-    if (m.apiVersion !== 1) errors.push(`${manifestPath}: apiVersion must be 1`);
+    if (!SUPPORTED_API_VERSIONS.has(m.apiVersion)) {
+      errors.push(
+        `${manifestPath}: apiVersion ${m.apiVersion} is unsupported (supported: ${[...SUPPORTED_API_VERSIONS].join(', ')})`,
+      );
+    }
     if (m.kind !== kind) {
       errors.push(`${manifestPath}: kind "${m.kind}" does not match its directory "${kind}"`);
     }
@@ -75,6 +80,8 @@ for (const kind of KINDS) {
         errors.push(`${manifestPath}: shape.entry "${m.shape.entry}" not found in ${dir}`);
       }
     }
+    // theme plugins carry no kind-specific manifest payload (the styling lives
+    // in the plugin's own files), so there is intentionally nothing to require.
 
     if (m.id) {
       if (seenIds.has(m.id)) {
