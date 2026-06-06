@@ -73,3 +73,55 @@ jobs:
         with:
           name: gitleaks-results.sarif
           path: gitleaks.sarif
+
+  # Refuse compiled / opaque binary artefacts in the tree. Plugins are source
+  # only (JSON manifests + JS); a committed ELF, shared library, object file or
+  # Python/Java bytecode is either an accident or a way to smuggle code past
+  # review, so fail on it. Images report as image/* and are kept.
+  no-binaries:
+    name: no binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Reject tracked compiled artefacts
+        run: |
+          fail=0
+          # By content: executables, shared libraries, object files.
+          mapfile -t bymime < <(
+            git ls-files -z | xargs -0 file --mime-type 2>/dev/null \
+              | grep -E ': application/x-(executable|pie-executable|sharedlib|object)$' || true
+          )
+          # By extension: bytecode and native libs that `file` can misclassify.
+          # NUL-delimited so a path containing a newline can't corrupt the list.
+          mapfile -d '' -t byext < <(
+            git ls-files -z '*.pyc' '*.pyo' '*.so' '*.o' '*.a' '*.dll' '*.dylib' '*.exe' '*.class' '*.wasm' || true
+          )
+          if (( ${#bymime[@]} > 0 )); then
+            echo 'Tracked binary files (by content):'
+            printf '  %s\n' "${bymime[@]}"
+            fail=1
+          fi
+          if (( ${#byext[@]} > 0 )); then
+            echo 'Tracked compiled artefacts (by extension):'
+            printf '  %s\n' "${byext[@]}"
+            fail=1
+          fi
+          if (( fail )); then
+            echo 'Compiled artefacts do not belong in the plugins repo.'
+            exit 1
+          fi
+          echo 'No binary artefacts tracked.'
+
+  # Validate every plugin manifest (valid JSON, kind matches its folder, unique
+  # reverse-DNS id, semver, kind-specific payload) so a malformed or mislabelled
+  # plugin fails here rather than at load time in the app. The validator uses
+  # only Node built-ins, so there is nothing to install or audit.
+  manifest-validation:
+    name: manifest validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/validate-plugins.mjs
