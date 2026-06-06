@@ -6,6 +6,7 @@
   "version": "0.1.0",
   "author": "Maik-0000FF",
   "license": "GPL-3.0-or-later",
+  "permissions": ["exec"],
   "actions": [
     {
       "name": "launch",
