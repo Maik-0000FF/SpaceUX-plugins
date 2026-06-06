@@ -33,6 +33,9 @@ that ship code, an `index.js`. Every tracked file carries an SPDX header, e.g.:
 // SPDX-License-Identifier: GPL-3.0-or-later
 ```
 
+The SPDX header is a required convention checked in review, not by an automated
+gate, so a missing one will not fail CI but will be asked for.
+
 ## The manifest
 
 `manifest.json` is validated in CI (`scripts/validate-plugins.mjs`). Required
@@ -52,6 +55,8 @@ Kind-specific payload:
 - `function`: an `actions` array.
 - `nav-style`: a `presets` array.
 - `shape`: a `shape` object whose `entry` points at the plugin's `index.js`.
+- `theme`: no extra payload for now, the common fields only; the styling lives
+  in the plugin's own files.
 
 See the existing plugins for complete examples.
 
