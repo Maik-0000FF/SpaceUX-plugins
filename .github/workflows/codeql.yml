@@ -3,7 +3,8 @@
 
 name: CodeQL
 
-# Static security analysis of the plugin JavaScript. This is the repo where
+# Static security analysis of the plugin source (the javascript-typescript
+# extractor covers both, though the plugins are JS today). This is the repo where
 # untrusted community code lands, so it runs the security-extended query set
 # (taint analysis for command injection, path traversal, unsafe deserialization,
 # etc.) that the coarse line scan in scan-plugin-code.mjs cannot do. Findings go
@@ -27,7 +28,7 @@ concurrency:
 
 jobs:
   analyze:
-    name: analyze (javascript)
+    name: analyze (javascript-typescript)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
