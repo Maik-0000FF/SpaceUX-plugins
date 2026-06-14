@@ -128,9 +128,11 @@ for (const kind of KINDS) {
           if (h.re.test(line)) errors.push(`${at}: ${h.label}`);
         }
         if (CHILD_PROCESS.test(line)) {
-          if (kind === 'function')
+          if (kind === 'function') {
             advisories.push(`${at}: child_process (prefer ctx.launch for scope-decoupled launching)`);
-          else errors.push(`${at}: child_process is not allowed in a ${kind} plugin`);
+          } else {
+            errors.push(`${at}: child_process is not allowed in a ${kind} plugin`);
+          }
         }
         for (const n of NETWORK) {
           if (n.re.test(line)) advisories.push(`${at}: ${n.label}`);
