@@ -76,7 +76,8 @@ Open a pull request and these run automatically:
 - **code scan** (`scripts/scan-plugin-code.mjs`): hard-fails on dynamic code
   execution (`eval`, the `Function` constructor) in any plugin, and on importing
   `child_process` in a `theme` / `nav-style` / `shape` plugin. Network access and
-  `child_process` in a `function` plugin are listed for the reviewer.
+  `child_process` in a `function` plugin are listed for the reviewer; a function
+  launcher should prefer the host's `ctx.launch` over a raw spawn.
 - **gitleaks**: no secrets in the history.
 - **CodeQL**: static security analysis of the plugin source.
 
@@ -87,7 +88,10 @@ A plugin's `index.js` is executed by the app with the user's privileges
 seriously:
 
 - Do only what your plugin describes. A `function` launcher may spawn processes;
-  a `theme`, `nav-style`, or `shape` plugin should not.
+  a `theme`, `nav-style`, or `shape` plugin should not. To launch a program,
+  prefer `ctx.launch(command)` over importing `node:child_process`: it runs the
+  program in its own systemd scope, so it does not inherit SpaceUX's scope and
+  stall session logout. See `function/example-launch` for the pattern.
 - No dynamic code execution (`eval`, `new Function`) and no obfuscation
   (encoded blobs that hide what the code does).
 - Keep dependencies to a minimum, ideally none.

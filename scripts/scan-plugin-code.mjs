@@ -20,7 +20,8 @@
 //   - importing child_process in a theme / nav-style / shape plugin.
 //
 // Advisory (printed for review, does not fail): network access, and
-// child_process in a function plugin.
+// child_process in a function plugin (which should prefer the host's
+// ctx.launch over a raw spawn, so the program runs in its own systemd scope).
 
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -127,7 +128,8 @@ for (const kind of KINDS) {
           if (h.re.test(line)) errors.push(`${at}: ${h.label}`);
         }
         if (CHILD_PROCESS.test(line)) {
-          if (kind === 'function') advisories.push(`${at}: child_process`);
+          if (kind === 'function')
+            advisories.push(`${at}: child_process (prefer ctx.launch for scope-decoupled launching)`);
           else errors.push(`${at}: child_process is not allowed in a ${kind} plugin`);
         }
         for (const n of NETWORK) {
